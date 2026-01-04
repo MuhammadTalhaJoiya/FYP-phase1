@@ -1,23 +1,42 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore';
+import { toast } from 'sonner';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
+    const { user, logout } = useAuthStore();
 
     return (
         <div className="min-h-screen bg-gray-100">
             <header className="bg-gray-900 text-white py-4 shadow-lg">
                 <div className="container mx-auto px-6 flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold">A</div>
-                        <h1 className="text-xl font-bold">Admin Panel</h1>
+                        <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold">
+                            {user?.fullName?.split(' ').map(n => n[0]).join('').toUpperCase() || 'A'}
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold">Admin Panel</h1>
+                            {user?.fullName && <p className="text-xs text-gray-400">{user.fullName}</p>}
+                        </div>
                     </div>
-                    <button onClick={() => navigate('/')} className="text-sm text-gray-400 hover:text-white">Logout</button>
+                    <button 
+                        onClick={() => {
+                            logout();
+                            toast.success('Logged out successfully');
+                            navigate('/');
+                        }} 
+                        className="text-sm text-gray-400 hover:text-white"
+                    >
+                        Logout
+                    </button>
                 </div>
             </header>
 
             <div className="container mx-auto px-6 py-8">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">System Overview</h2>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                    Welcome, {user?.fullName?.split(' ')[0] || 'Admin'}! 👋
+                </h2>
 
                 {/* KPI Cards */}
                 <div className="grid md:grid-cols-4 gap-6 mb-8">

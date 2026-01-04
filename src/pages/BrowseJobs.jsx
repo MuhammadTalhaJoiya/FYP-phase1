@@ -1,226 +1,293 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Search, MapPin, Briefcase, DollarSign, Users, ArrowLeft, Filter, Building2, ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { Input } from '../components/ui/Input';
+import { Select } from '../components/ui/Select';
+import { JobCardSkeleton } from '../components/ui/Skeleton';
+import { jobsAPI } from '../lib/api';
 
 const BrowseJobs = () => {
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedType, setSelectedType] = useState('all');
+    const [selectedLocation, setSelectedLocation] = useState('all');
+    const [loading, setLoading] = useState(true);
+    const [jobs, setJobs] = useState([]);
 
-    // Dummy job listings
-    const jobs = [
-        {
-            id: 1,
-            title: 'Senior React Developer',
-            company: 'TechCorp Inc.',
-            location: 'San Francisco, CA',
-            type: 'Full-time',
-            salary: '$120k - $160k',
-            posted: '2 days ago',
-            applicants: 45,
-            skills: ['React.js', 'TypeScript', 'Node.js', 'GraphQL'],
-            description: 'Build cutting-edge web applications with modern React.'
-        },
-        {
-            id: 2,
-            title: 'Full Stack Engineer',
-            company: 'StartupXYZ',
-            location: 'Remote',
-            type: 'Full-time',
-            salary: '$100k - $140k',
-            posted: '1 week ago',
-            applicants: 67,
-            skills: ['React.js', 'Node.js', 'PostgreSQL', 'AWS'],
-            description: 'Join our innovative startup to build scalable applications.'
-        },
-        {
-            id: 3,
-            title: 'Frontend Developer',
-            company: 'WebSolutions Ltd',
-            location: 'New York, NY',
-            type: 'Contract',
-            salary: '$80k - $100k',
-            posted: '3 days ago',
-            applicants: 32,
-            skills: ['HTML', 'CSS', 'JavaScript', 'Vue.js'],
-            description: 'Create beautiful and responsive user interfaces.'
-        },
-        {
-            id: 4,
-            title: 'DevOps Engineer',
-            company: 'CloudTech Solutions',
-            location: 'Austin, TX',
-            type: 'Full-time',
-            salary: '$110k - $150k',
-            posted: '5 days ago',
-            applicants: 28,
-            skills: ['AWS', 'Docker', 'Kubernetes', 'Jenkins'],
-            description: 'Manage cloud infrastructure and CI/CD pipelines.'
-        },
-        {
-            id: 5,
-            title: 'UI/UX Designer',
-            company: 'DesignHub',
-            location: 'Remote',
-            type: 'Full-time',
-            salary: '$90k - $120k',
-            posted: '1 day ago',
-            applicants: 54,
-            skills: ['Figma', 'Adobe XD', 'Sketch', 'Prototyping'],
-            description: 'Design exceptional user experiences for our products.'
-        },
-        {
-            id: 6,
-            title: 'Backend Developer',
-            company: 'DataFlow Inc',
-            location: 'Seattle, WA',
-            type: 'Full-time',
-            salary: '$95k - $130k',
-            posted: '4 days ago',
-            applicants: 39,
-            skills: ['Python', 'Django', 'PostgreSQL', 'Redis'],
-            description: 'Build robust backend systems and APIs.'
-        },
-        {
-            id: 7,
-            title: 'Mobile Developer',
-            company: 'AppTech',
-            location: 'Los Angeles, CA',
-            type: 'Contract',
-            salary: '$85k - $115k',
-            posted: '6 days ago',
-            applicants: 41,
-            skills: ['React Native', 'iOS', 'Android', 'Firebase'],
-            description: 'Develop cross-platform mobile applications.'
-        },
-        {
-            id: 8,
-            title: 'Data Scientist',
-            company: 'AI Labs',
-            location: 'Boston, MA',
-            type: 'Full-time',
-            salary: '$130k - $170k',
-            posted: '2 days ago',
-            applicants: 62,
-            skills: ['Python', 'TensorFlow', 'SQL', 'Machine Learning'],
-            description: 'Apply AI/ML to solve complex business problems.'
-        }
-    ];
+    // Fetch real jobs from backend
+    useEffect(() => {
+        const fetchJobs = async () => {
+            try {
+                setLoading(true);
+                const response = await jobsAPI.getAll();
+                
+                // Backend returns { data: { jobs: [...], pagination: {...} } }
+                const jobsData = response.data?.jobs || [];
+                console.log('Fetched jobs:', jobsData); // Debug log
+                setJobs(jobsData);
+            } catch (error) {
+                console.error('Error fetching jobs:', error);
+                toast.error('Failed to load jobs. Please try again.');
+                setJobs([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchJobs();
+    }, []);
 
     const filteredJobs = jobs.filter(job => {
+        // Parse skills if they're stored as JSON string
+        let jobSkills = [];
+        try {
+            jobSkills = typeof job.skills === 'string' ? JSON.parse(job.skills) : (job.skills || []);
+        } catch (e) {
+            jobSkills = [];
+        }
+
         const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            job.company.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesType = selectedType === 'all' || job.type === selectedType;
-        return matchesSearch && matchesType;
+            job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            jobSkills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
+        
+        const matchesType = selectedType === 'all' || job.jobType?.toLowerCase() === selectedType.toLowerCase();
+        
+        const matchesLocation = selectedLocation === 'all' || 
+            job.location.toLowerCase().includes(selectedLocation.toLowerCase()) ||
+            (selectedLocation === 'remote' && job.isRemote);
+        
+        return matchesSearch && matchesType && matchesLocation;
     });
+
+    const handleApply = (jobId) => {
+        // Navigate to job application page
+        navigate(`/apply/${jobId}`);
+    };
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <header className="bg-white border-b border-gray-200">
+            <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <h1 className="text-xl font-bold text-primary-600">AI Recruitment</h1>
-                    <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-                        ← Back to Dashboard
-                    </button>
+                    <Button 
+                        variant="ghost" 
+                        onClick={() => navigate('/dashboard')}
+                        icon={<ArrowLeft className="w-4 h-4" />}
+                    >
+                        Back to Dashboard
+                    </Button>
                 </div>
             </header>
 
             <div className="container mx-auto px-6 py-8 max-w-7xl">
                 {/* Page Header */}
-                <div className="mb-6">
-                    <h1 className="text-3xl font-bold text-gray-900">Browse Jobs</h1>
-                    <p className="text-gray-600 mt-1">Explore {jobs.length} available positions</p>
-                </div>
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6"
+                >
+                    <h1 className="text-4xl font-bold text-gray-900">Browse Jobs</h1>
+                    <p className="text-gray-600 mt-2">Explore {jobs.length} available positions</p>
+                </motion.div>
 
                 {/* Search & Filters */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border mb-6">
-                    <div className="grid md:grid-cols-4 gap-4">
-                        <div className="md:col-span-2">
-                            <div className="relative">
-                                <input
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                >
+                    <Card className="mb-6">
+                        <div className="grid md:grid-cols-12 gap-4">
+                            <div className="md:col-span-5">
+                                <Input
                                     type="text"
-                                    placeholder="Search jobs or companies..."
+                                    placeholder="Search jobs, companies, or skills..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    icon={<Search className="w-5 h-5" />}
                                 />
-                                <svg className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
+                            </div>
+                            <div className="md:col-span-3">
+                                <Select
+                                    value={selectedType}
+                                    onChange={(e) => setSelectedType(e.target.value)}
+                                >
+                                    <option value="all">All Types</option>
+                                    <option value="full-time">Full-time</option>
+                                    <option value="part-time">Part-time</option>
+                                    <option value="contract">Contract</option>
+                                    <option value="internship">Internship</option>
+                                    <option value="remote">Remote</option>
+                                </Select>
+                            </div>
+                            <div className="md:col-span-3">
+                                <Select
+                                    value={selectedLocation}
+                                    onChange={(e) => setSelectedLocation(e.target.value)}
+                                >
+                                    <option value="all">All Locations</option>
+                                    <option value="remote">Remote Only</option>
+                                    <option value="lahore">Lahore</option>
+                                    <option value="karachi">Karachi</option>
+                                    <option value="islamabad">Islamabad</option>
+                                    <option value="rawalpindi">Rawalpindi</option>
+                                    <option value="faisalabad">Faisalabad</option>
+                                </Select>
+                            </div>
+                            <div className="md:col-span-1">
+                                <Button className="w-full" icon={<Filter className="w-4 h-4" />}>
+                                    <span className="sr-only sm:not-sr-only">Filter</span>
+                                </Button>
                             </div>
                         </div>
-                        <select
-                            value={selectedType}
-                            onChange={(e) => setSelectedType(e.target.value)}
-                            className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                        >
-                            <option value="all">All Types</option>
-                            <option value="Full-time">Full-time</option>
-                            <option value="Contract">Contract</option>
-                            <option value="Part-time">Part-time</option>
-                        </select>
-                        <button className="px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition">
-                            Search
-                        </button>
-                    </div>
-                </div>
+                    </Card>
+                </motion.div>
 
                 {/* Results Count */}
-                <div className="mb-4">
-                    <p className="text-gray-600">{filteredJobs.length} jobs found</p>
+                <div className="mb-4 flex items-center justify-between">
+                    <p className="text-gray-600">
+                        <span className="font-semibold text-gray-900">{filteredJobs.length}</span> jobs found
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Sort by:</span>
+                        <Select className="w-auto">
+                            <option>Most Recent</option>
+                            <option>Salary (High to Low)</option>
+                            <option>Most Applicants</option>
+                        </Select>
+                    </div>
                 </div>
 
                 {/* Job Listings */}
                 <div className="space-y-4">
-                    {filteredJobs.map((job) => (
-                        <div key={job.id} className="bg-white rounded-xl shadow-sm p-6 border hover:shadow-md transition">
-                            <div className="flex items-start justify-between mb-4">
-                                <div className="flex-1">
-                                    <h3 className="text-xl font-bold text-gray-900">{job.title}</h3>
-                                    <p className="text-gray-600 mt-1">{job.company} • {job.location}</p>
-                                </div>
-                                <button
-                                    onClick={() => navigate('/upload-cv')}
-                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition"
+                    {loading ? (
+                        <>
+                            <JobCardSkeleton />
+                            <JobCardSkeleton />
+                            <JobCardSkeleton />
+                        </>
+                    ) : filteredJobs.length === 0 ? (
+                        <Card className="text-center py-16">
+                            <div className="text-6xl mb-4">🔍</div>
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">No jobs found</h3>
+                            <p className="text-gray-600 mb-6">Try adjusting your search or filters</p>
+                            <Button onClick={() => { setSearchQuery(''); setSelectedType('all'); setSelectedLocation('all'); }}>
+                                Clear Filters
+                            </Button>
+                        </Card>
+                    ) : (
+                        filteredJobs.map((job, index) => {
+                            // Parse skills if stored as JSON string
+                            let jobSkills = [];
+                            try {
+                                jobSkills = typeof job.skills === 'string' ? JSON.parse(job.skills) : (job.skills || []);
+                            } catch (e) {
+                                jobSkills = [];
+                            }
+
+                            // Calculate time ago
+                            const timeAgo = job.createdAt 
+                                ? Math.floor((new Date() - new Date(job.createdAt)) / (1000 * 60 * 60 * 24)) 
+                                : 0;
+                            const postedText = timeAgo === 0 ? 'Today' : timeAgo === 1 ? '1 day ago' : `${timeAgo} days ago`;
+
+                            // Get company logo (first letter of company name)
+                            const companyLogo = job.company?.charAt(0).toUpperCase() || '💼';
+
+                            return (
+                                <motion.div
+                                    key={job.id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.05 }}
                                 >
-                                    Apply Now
-                                </button>
-                            </div>
+                                    <Card hover className="p-6">
+                                        <div className="flex gap-4">
+                                            {/* Company Logo */}
+                                            <div className="flex-shrink-0">
+                                                <div className="w-16 h-16 bg-gradient-to-br from-primary-100 to-purple-100 rounded-xl flex items-center justify-center text-2xl font-bold text-primary-700">
+                                                    {companyLogo}
+                                                </div>
+                                            </div>
 
-                            <p className="text-gray-700 mb-4">{job.description}</p>
+                                            {/* Job Details */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div className="flex-1">
+                                                        <h3 className="text-xl font-bold text-gray-900 mb-1">{job.title}</h3>
+                                                        <p className="text-gray-600 flex items-center gap-2">
+                                                            <Building2 className="w-4 h-4" />
+                                                            {job.company}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        <Button
+                                                            onClick={() => handleApply(job.id)}
+                                                            icon={<ArrowRight className="w-4 h-4" />}
+                                                        >
+                                                            Apply Now
+                                                        </Button>
+                                                        {job.isPremium && (
+                                                            <Badge variant="warning" className="text-xs">
+                                                                ⭐ Featured
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </div>
 
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                {job.skills.map((skill, idx) => (
-                                    <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
-                                        {skill}
-                                    </span>
-                                ))}
-                            </div>
+                                                <p className="text-gray-700 mb-4 line-clamp-2">{job.description}</p>
 
-                            <div className="flex items-center justify-between pt-4 border-t">
-                                <div className="flex gap-4 text-sm text-gray-600">
-                                    <span className="flex items-center gap-1">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                        </svg>
-                                        {job.type}
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        {job.salary}
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                                        </svg>
-                                        {job.applicants} applicants
-                                    </span>
-                                </div>
-                                <span className="text-sm text-gray-500">Posted {job.posted}</span>
-                            </div>
-                        </div>
-                    ))}
+                                                {/* Skills */}
+                                                {jobSkills.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2 mb-4">
+                                                        {jobSkills.slice(0, 6).map((skill, idx) => (
+                                                            <Badge key={idx} variant="default">
+                                                                {skill}
+                                                            </Badge>
+                                                        ))}
+                                                        {jobSkills.length > 6 && (
+                                                            <Badge variant="default" className="bg-gray-100 text-gray-600">
+                                                                +{jobSkills.length - 6} more
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Job Meta */}
+                                                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <Briefcase className="w-4 h-4" />
+                                                        {job.jobType || job.type || 'Full-time'}
+                                                    </span>
+                                                    <span className="flex items-center gap-1.5">
+                                                        <MapPin className="w-4 h-4" />
+                                                        {job.location}
+                                                        {job.isRemote && ' (Remote)'}
+                                                    </span>
+                                                    {job.salaryRange && (
+                                                        <span className="flex items-center gap-1.5">
+                                                            <DollarSign className="w-4 h-4" />
+                                                            {job.salaryRange}
+                                                        </span>
+                                                    )}
+                                                    <span className="flex items-center gap-1.5">
+                                                        <Users className="w-4 h-4" />
+                                                        {job.applicationCount || 0} applicants
+                                                    </span>
+                                                    <span className="text-gray-400 ml-auto">Posted {postedText}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                </motion.div>
+                            );
+                        })
+                    )}
                 </div>
             </div>
         </div>

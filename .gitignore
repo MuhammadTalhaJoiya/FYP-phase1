@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.vite/
+
+# Env files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.cursor/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Credentials
+*.pem
+*.key
+credentials.json
+
+# Backend runtime storage (uploads, temp files)
+ai-recruitment-backend/uploads/
+ai-recruitment-backend/temp/
+
+
