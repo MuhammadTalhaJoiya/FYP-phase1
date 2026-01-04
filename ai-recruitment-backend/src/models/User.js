@@ -92,7 +92,7 @@ const User = sequelize.define('User', {
   },
   jobPostsRemaining: {
     type: DataTypes.INTEGER,
-    defaultValue: 0,
+    defaultValue: 5,
     field: 'job_posts_remaining',
     comment: 'Number of job posts remaining in subscription'
   },

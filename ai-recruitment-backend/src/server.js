@@ -13,6 +13,7 @@ import applicationRoutes from './routes/applicationRoutes.js';
 import cvRoutes from './routes/cvRoutes.js';
 import chatbotRoutes from './routes/chatbotRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import interviewRoutes from './routes/interviewRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -70,6 +71,7 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/cv', cvRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/interviews', interviewRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
