@@ -14,7 +14,7 @@ import { useAuthStore } from '../stores/authStore';
 const RecruiterDashboard = () => {
     const navigate = useNavigate();
     const { logout, user } = useAuthStore();
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(() => !localStorage.getItem('recruiterPlan'));
     const [selectedPlan, setSelectedPlan] = useState('PROFESSIONAL');
     const [postedJobs, setPostedJobs] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -224,6 +224,85 @@ const RecruiterDashboard = () => {
                             <p className="text-gray-600 text-sm">Create Voice/Video Interview</p>
                         </Card>
                     </div>
+
+                    {/* Pricing Plans Section - Always visible for recruiters */}
+                    <Card className="mb-8">
+                        <div className="p-6 border-b border-gray-200 flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-lg">
+                                    <Crown className="w-6 h-6 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold text-gray-900">Pricing Plans</h2>
+                                    <p className="text-sm text-gray-500">
+                                        {currentPlan
+                                            ? `You're on ${RECRUITER_PRICING[currentPlan].name}. Upgrade or change plan below.`
+                                            : 'Choose a plan to post jobs and access recruiter features.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setSelectedPlan('PROFESSIONAL');
+                                    setShowPaymentModal(true);
+                                }}
+                                icon={<Crown className="w-4 h-4" />}
+                            >
+                                {currentPlan ? 'Change plan' : 'View all plans'}
+                            </Button>
+                        </div>
+                        <div className="p-6 pt-0">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {['PAY_PER_POST', 'STARTER', 'PROFESSIONAL', 'ENTERPRISE'].map((key) => {
+                                    const plan = RECRUITER_PRICING[key];
+                                    const isCurrent = currentPlan === key;
+                                    const isPopular = plan.popular;
+                                    return (
+                                        <div
+                                            key={key}
+                                            className={`relative rounded-xl border-2 p-4 transition hover:shadow-md ${
+                                                isCurrent
+                                                    ? 'border-indigo-500 bg-indigo-50'
+                                                    : isPopular
+                                                    ? 'border-purple-300 bg-purple-50/50'
+                                                    : 'border-gray-200 bg-white'
+                                            }`}
+                                        >
+                                            {isPopular && (
+                                                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                                                    Popular
+                                                </span>
+                                            )}
+                                            {isCurrent && (
+                                                <span className="absolute top-2 right-2">
+                                                    <CheckCircle className="w-5 h-5 text-green-600" />
+                                                </span>
+                                            )}
+                                            <h4 className="font-bold text-gray-900 mt-1">{plan.name}</h4>
+                                            <p className="text-xs text-gray-600 mb-2">{plan.bestFor}</p>
+                                            <p className="text-2xl font-bold text-gray-900">
+                                                {formatPrice(plan.price[DEFAULT_CURRENCY], DEFAULT_CURRENCY)}
+                                                <span className="text-sm font-normal text-gray-500">/{plan.period}</span>
+                                            </p>
+                                            <Button
+                                                size="sm"
+                                                variant={isCurrent ? 'outline' : 'default'}
+                                                className="w-full mt-3"
+                                                onClick={() => {
+                                                    setSelectedPlan(key);
+                                                    setShowPaymentModal(true);
+                                                }}
+                                                disabled={isCurrent}
+                                            >
+                                                {isCurrent ? 'Current plan' : 'Choose'}
+                                            </Button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </Card>
 
                     {/* Active Jobs List */}
                     <Card>

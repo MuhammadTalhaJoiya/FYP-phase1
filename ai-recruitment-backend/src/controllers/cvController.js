@@ -2,7 +2,7 @@ import { User, Job } from '../models/index.js';
 import { successResponse, errorResponse, notFoundResponse } from '../utils/response.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../config/cloudinary.js';
 import { cleanupFile } from '../config/multer.js';
-import { analyzeCV, matchJobToCV } from '../services/aiService.js';
+import { analyzeCV, matchJobToCV, matchJobToCVWithText, extractTextFromFile } from '../services/aiService.js';
 
 // Upload and analyze CV (General Analysis)
 export const uploadAndAnalyzeCV = async (req, res) => {
@@ -99,12 +99,26 @@ export const matchCVWithJob = async (req, res) => {
       return errorResponse(res, 'AI analysis limit reached. Please upgrade to premium for unlimited analyses.', 403);
     }
 
+    // Extract text from local PDF first (more reliable than downloading from Cloudinary later)
+    let localCvText = null;
+    try {
+      localCvText = await extractTextFromFile(cvFile.path);
+    } catch (err) {
+      console.warn('Local CV extraction skipped:', err.message);
+    }
+
     // Upload CV to Cloudinary
     const uploadResult = await uploadToCloudinary(cvFile, 'cvs');
     cleanupFile(cvFile.path);
 
-    // Analyze CV and match with job
-    const matchResult = await matchJobToCV(uploadResult.url, job);
+    // Use local text if we got it (PDF with readable text); otherwise fall back to URL-based extraction
+    let matchResult;
+    if (localCvText && localCvText.text && localCvText.text.length >= 10 && !localCvText.isImageBased) {
+      console.log('📄 Using locally extracted CV text for matching');
+      matchResult = await matchJobToCVWithText(localCvText.text, job);
+    } else {
+      matchResult = await matchJobToCV(uploadResult.url, job);
+    }
 
     // Update user's AI analysis count
     const now = new Date();

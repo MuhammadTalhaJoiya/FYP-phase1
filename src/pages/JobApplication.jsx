@@ -289,18 +289,26 @@ const JobApplication = () => {
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div className="bg-green-50 rounded-xl p-4 border border-green-100">
                                                                 <p className="text-xs font-bold text-green-700 uppercase mb-2">Matched Skills</p>
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    {matchData.matchedSkills?.map((skill, i) => (
-                                                                        <span key={i} className="px-2 py-0.5 bg-white text-green-700 rounded text-[10px] font-bold border border-green-200">{skill}</span>
-                                                                    ))}
+                                                                <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+                                                                    {matchData.matchedSkills?.length ? (
+                                                                        matchData.matchedSkills.map((skill, i) => (
+                                                                            <span key={i} className="px-2 py-0.5 bg-white text-green-700 rounded text-[10px] font-bold border border-green-200">{skill}</span>
+                                                                        ))
+                                                                    ) : (
+                                                                        <span className="text-xs text-green-600/80 italic">None identified — use a text-based PDF for best results</span>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                             <div className="bg-red-50 rounded-xl p-4 border border-red-100">
                                                                 <p className="text-xs font-bold text-red-700 uppercase mb-2">Missing Skills</p>
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    {matchData.missingSkills?.map((skill, i) => (
-                                                                        <span key={i} className="px-2 py-0.5 bg-white text-red-700 rounded text-[10px] font-bold border border-red-200">{skill}</span>
-                                                                    ))}
+                                                                <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+                                                                    {matchData.missingSkills?.length ? (
+                                                                        matchData.missingSkills.map((skill, i) => (
+                                                                            <span key={i} className="px-2 py-0.5 bg-white text-red-700 rounded text-[10px] font-bold border border-red-200">{skill}</span>
+                                                                        ))
+                                                                    ) : (
+                                                                        <span className="text-xs text-red-600/80 italic">None identified — use a text-based PDF for best results</span>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>

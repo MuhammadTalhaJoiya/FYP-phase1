@@ -1,6 +1,91 @@
 import { generateJSONContent, generateContent } from '../config/openai.js';
+import * as geminiConfig from '../config/gemini.js';
 import axios from 'axios';
 import pdfParse from 'pdf-parse';
+import fs from 'fs';
+import path from 'path';
+
+// Try OpenAI first, then Gemini (e.g. when OpenAI quota exceeded). Returns null if both fail.
+const generateJSONWithFallback = async (prompt) => {
+  try {
+    return await generateJSONContent(prompt);
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+    console.warn('OpenAI JSON failed:', msg);
+    if (process.env.GEMINI_API_KEY && geminiConfig.generateJSONContent) {
+      try {
+        console.log('🔄 Falling back to Gemini for CV matching...');
+        return await geminiConfig.generateJSONContent(prompt);
+      } catch (geminiErr) {
+        console.warn('Gemini JSON fallback failed:', geminiErr && geminiErr.message);
+      }
+    }
+    return null;
+  }
+};
+
+// Rule-based skill match when AI is unavailable (no API calls). Uses job skills + CV text.
+const ruleBasedMatch = (cvText, job) => {
+  let jobSkills = [];
+  try {
+    jobSkills = typeof job.skills === 'string' ? JSON.parse(job.skills) : (job.skills || []);
+  } catch (e) {
+    jobSkills = [];
+  }
+  if (!Array.isArray(jobSkills)) jobSkills = [];
+  const cvLower = (cvText || '').toLowerCase();
+  const matched = [];
+  const missing = [];
+  for (const s of jobSkills) {
+    const skill = String(s).trim();
+    if (!skill) continue;
+    if (cvLower.includes(skill.toLowerCase())) matched.push(skill);
+    else missing.push(skill);
+  }
+  const total = matched.length + missing.length;
+  const matchScore = total ? Math.min(100, Math.round((matched.length / total) * 85) + 15) : 70;
+  const feedback = total
+    ? `AI analysis was temporarily unavailable. Approximate match from your CV: ${matched.length} of ${total} required skills found (${matched.join(', ') || 'none'}). ${missing.length ? `Missing: ${missing.join(', ')}.` : ''} The recruiter will review your application.`
+    : 'AI analysis was temporarily unavailable. Your CV was uploaded successfully; the recruiter will review it.';
+  return {
+    matchScore,
+    matchedSkills: matched,
+    missingSkills: missing,
+    feedback,
+    highlights: matched.length ? matched.map((s) => `Has ${s}`) : ['CV uploaded successfully'],
+    gaps: missing.length ? missing.map((s) => `Missing: ${s}`) : []
+  };
+};
+
+// Normalize skills from AI (sometimes returns string or single item)
+const normalizeSkillsArray = (val) => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.map(s => String(s).trim()).filter(Boolean);
+  if (typeof val === 'string') return val.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  return [String(val)];
+};
+
+// Extract text from a local PDF file (used when we have the file on disk - more reliable than URL)
+export const extractTextFromFile = async (filePath) => {
+  try {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext !== '.pdf') return null;
+    console.log('📄 Extracting text from local PDF file:', filePath);
+    const buffer = fs.readFileSync(filePath);
+    const pdfData = await pdfParse(buffer);
+    const text = (pdfData.text || '').trim();
+    const pageCount = pdfData.numpages || 1;
+    console.log(`📄 Local PDF parsed: ${text.length} chars, ${pageCount} pages`);
+    if (!text || text.length < 10) {
+      console.warn('⚠️ Very short or empty text from local PDF (image-based?)');
+      return { text: '', isImageBased: true };
+    }
+    return { text, isImageBased: false };
+  } catch (err) {
+    console.warn('Local PDF extraction failed:', err.message);
+    return null;
+  }
+};
 
 // Extract text from CV URL
 const extractTextFromCV = async (cvUrl) => {
@@ -134,8 +219,8 @@ export const matchJobToCV = async (cvUrl, job) => {
       console.log('📷 Image-based PDF detected - returning partial match for manual review');
       return {
         matchScore: 65,
-        matchedSkills: [],
-        missingSkills: [],
+        matchedSkills: normalizeSkillsArray([]),
+        missingSkills: normalizeSkillsArray([]),
         feedback: "This CV appears to be an image-based PDF (possibly scanned). Text could not be automatically extracted for AI analysis. The recruiter will manually review your application. Consider uploading a text-based PDF for better AI matching.",
         highlights: ["CV uploaded successfully", "Pending manual review"],
         gaps: ["AI analysis unavailable for image-based PDFs"],
@@ -148,11 +233,12 @@ export const matchJobToCV = async (cvUrl, job) => {
     // Parse job skills
     let jobSkills = [];
     try {
-      jobSkills = typeof job.skills === 'string' ? JSON.parse(job.skills) : job.skills;
+      jobSkills = typeof job.skills === 'string' ? JSON.parse(job.skills) : (job.skills || []);
     } catch (e) {
       jobSkills = [];
     }
-    
+    if (!Array.isArray(jobSkills)) jobSkills = [];
+
     const prompt = `
 You are an expert recruitment AI. Match a candidate's CV with a job posting and provide an accurate, justified match score.
 
@@ -194,7 +280,11 @@ Provide a JSON response:
 }
 `;
 
-    const matchResult = await generateJSONContent(prompt);
+    const matchResult = await generateJSONWithFallback(prompt);
+    if (!matchResult) {
+      console.log('📋 Using rule-based skill match (AI unavailable)');
+      return ruleBasedMatch(cvContent.text, job);
+    }
     
     console.log(`✅ Match complete: ${matchResult.matchScore}% match`);
     console.log(`📊 Matched skills: ${matchResult.matchedSkills?.length || 0}`);
@@ -202,16 +292,110 @@ Provide a JSON response:
     
     return {
       matchScore: matchResult.matchScore || 70,
-      matchedSkills: matchResult.matchedSkills || [],
-      missingSkills: matchResult.missingSkills || [],
+      matchedSkills: normalizeSkillsArray(matchResult.matchedSkills),
+      missingSkills: normalizeSkillsArray(matchResult.missingSkills),
       feedback: matchResult.feedback || "Your profile has been analyzed. The recruiter will review your application soon.",
-      highlights: matchResult.highlights || [],
-      gaps: matchResult.gaps || []
+      highlights: Array.isArray(matchResult.highlights) ? matchResult.highlights : (matchResult.highlights ? [matchResult.highlights] : []),
+      gaps: Array.isArray(matchResult.gaps) ? matchResult.gaps : (matchResult.gaps ? [matchResult.gaps] : [])
     };
     
   } catch (error) {
     console.error('❌ Job matching error:', error);
-    // Return fallback match
+    try {
+      const cvContent = await extractTextFromCV(cvUrl);
+      if (cvContent && !cvContent.isImageBased && cvContent.text && cvContent.text.length >= 10) {
+        console.log('📋 Using rule-based skill match after error');
+        return ruleBasedMatch(cvContent.text, job);
+      }
+    } catch (_) {}
+    return {
+      matchScore: 70,
+      matchedSkills: [],
+      missingSkills: [],
+      feedback: "Your application has been submitted successfully. The recruiter will review it soon.",
+      highlights: ["Application submitted"],
+      gaps: []
+    };
+  }
+};
+
+// Match CV to job using already-extracted text (avoids Cloudinary download; use when we have file on disk)
+export const matchJobToCVWithText = async (cvText, job) => {
+  if (!cvText || cvText.length < 10) {
+    return {
+      matchScore: 65,
+      matchedSkills: [],
+      missingSkills: [],
+      feedback: "CV text could not be extracted (e.g. image-based PDF). The recruiter will manually review your application. For best results, use a text-based PDF.",
+      highlights: ["CV uploaded successfully", "Pending manual review"],
+      gaps: ["AI analysis unavailable - upload a text-based PDF for matched/missing skills"],
+      requiresManualReview: true
+    };
+  }
+  try {
+    console.log('🤖 Matching CV to job with OpenAI (using extracted text)...');
+    let jobSkills = [];
+    try {
+      jobSkills = typeof job.skills === 'string' ? JSON.parse(job.skills) : (job.skills || []);
+    } catch (e) {
+      jobSkills = [];
+    }
+    const prompt = `
+You are an expert recruitment AI. Match a candidate's CV with a job posting and provide an accurate, justified match score.
+
+JOB DETAILS:
+- Title: ${job.title}
+- Company: ${job.company}
+- Required Skills: ${Array.isArray(jobSkills) ? jobSkills.join(', ') : jobSkills}
+- Experience Level: ${job.experienceLevel}
+- Job Type: ${job.jobType}
+- Requirements: ${job.requirements}
+- Description: ${job.description}
+
+CANDIDATE CV CONTENT:
+${cvText}
+
+IMPORTANT SCORING GUIDELINES:
+1. Be ACCURATE and FAIR - base the score strictly on match between CV and job requirements.
+2. List SPECIFIC skills from the CV that match the job in "matchedSkills" (array of strings).
+3. List SPECIFIC skills the job requires that are missing from the CV in "missingSkills" (array of strings).
+4. Consider experience level alignment.
+5. Give actionable feedback.
+
+Score: 90-100 = excellent, 75-89 = good, 60-74 = fair, 40-59 = partial, below 40 = poor match.
+
+Respond with JSON only:
+{
+  "matchScore": <number 0-100>,
+  "matchedSkills": ["skill1", "skill2"],
+  "missingSkills": ["skill3", "skill4"],
+  "experienceMatch": "excellent/good/fair/poor",
+  "feedback": "Detailed explanation referencing actual CV and job.",
+  "highlights": ["positive point 1", "positive point 2"],
+  "gaps": ["gap 1", "gap 2"]
+}
+`;
+    const matchResult = await generateJSONWithFallback(prompt);
+    if (!matchResult) {
+      console.log('📋 Using rule-based skill match (AI unavailable)');
+      return ruleBasedMatch(cvText, job);
+    }
+    console.log(`✅ Match complete: ${matchResult.matchScore}% match`);
+    console.log(`📊 Matched skills: ${normalizeSkillsArray(matchResult.matchedSkills).length}`);
+    console.log(`📊 Missing skills: ${normalizeSkillsArray(matchResult.missingSkills).length}`);
+    return {
+      matchScore: matchResult.matchScore != null ? Number(matchResult.matchScore) : 70,
+      matchedSkills: normalizeSkillsArray(matchResult.matchedSkills),
+      missingSkills: normalizeSkillsArray(matchResult.missingSkills),
+      feedback: matchResult.feedback || "Your profile has been analyzed. The recruiter will review your application soon.",
+      highlights: Array.isArray(matchResult.highlights) ? matchResult.highlights : (matchResult.highlights ? [matchResult.highlights] : []),
+      gaps: Array.isArray(matchResult.gaps) ? matchResult.gaps : (matchResult.gaps ? [matchResult.gaps] : [])
+    };
+  } catch (error) {
+    console.error('❌ Job matching (with text) error:', error);
+    try {
+      return ruleBasedMatch(cvText, job);
+    } catch (_) {}
     return {
       matchScore: 70,
       matchedSkills: [],
